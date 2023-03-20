@@ -63,6 +63,11 @@ parser.add_argument('--use_color', action='store_true', help='Use RGB color in i
 parser.add_argument('--use_sunrgbd_v2', action='store_true', help='Use V2 box labels for SUN RGB-D dataset')
 parser.add_argument('--overwrite', action='store_true', help='Overwrite existing log and dump folders.')
 parser.add_argument('--dump_results', action='store_true', help='Dump results.')
+parser.add_argument('--use_pointformer', action='store_true', help='Use Pointformer as backbone')
+parser.add_argument('--ratio', type=int, default=1)
+parser.add_argument('--refinement', type=int, default=0)
+parser.add_argument('--new_pe', action='store_true')
+parser.add_argument('--indiv_ckpt', action='store_true')
 FLAGS = parser.parse_args()
 
 # ------------------------------------------------------------------------- GLOBAL CONFIG BEG
@@ -82,7 +87,11 @@ DEFAULT_CHECKPOINT_PATH = os.path.join(LOG_DIR, 'checkpoint.tar')
 CHECKPOINT_PATH = FLAGS.checkpoint_path if FLAGS.checkpoint_path is not None \
     else DEFAULT_CHECKPOINT_PATH
 FLAGS.DUMP_DIR = DUMP_DIR
-
+POINTNET = not FLAGS.use_pointformer
+RATIO = FLAGS.ratio
+REFINEMENT = FLAGS.refinement
+NEW_PE = FLAGS.new_pe
+INDIV_CKPT = FLAGS.indiv_ckpt
 # Prepare LOG_DIR and DUMP_DIR
 if os.path.exists(LOG_DIR) and FLAGS.overwrite:
     print('Log folder %s already exists. Are you sure to overwrite? (Y/N)'%(LOG_DIR))
@@ -161,7 +170,11 @@ net = Detector(num_class=DATASET_CONFIG.num_class,
                num_proposal=FLAGS.num_target,
                input_feature_dim=num_input_channel,
                vote_factor=FLAGS.vote_factor,
-               sampling=FLAGS.cluster_sampling)
+               sampling=FLAGS.cluster_sampling,
+               pointnet=POINTNET,
+               ratio=RATIO,
+               refinement=REFINEMENT,
+               new_pe=NEW_PE)
 
 if torch.cuda.device_count() > 1:
   log_string("Let's use %d GPUs!" % (torch.cuda.device_count()))
@@ -317,7 +330,7 @@ def train(start_epoch):
         # REF: https://github.com/pytorch/pytorch/issues/5059
         np.random.seed()
         train_one_epoch()
-        if EPOCH_CNT == 0 or EPOCH_CNT % 10 == 9: # Eval every 10 epochs
+        if EPOCH_CNT == 0 or EPOCH_CNT % 10 == 4 or True: # Eval every 10 epochs
             loss = evaluate_one_epoch()
         # Save checkpoint
         save_dict = {'epoch': epoch+1, # after training one epoch, the start_epoch should be epoch+1
@@ -328,7 +341,9 @@ def train(start_epoch):
             save_dict['model_state_dict'] = net.module.state_dict()
         except:
             save_dict['model_state_dict'] = net.state_dict()
-        torch.save(save_dict, os.path.join(LOG_DIR, 'checkpoint.tar'))
-
+        if INDIV_CKPT is True:
+            torch.save(save_dict, os.path.join(LOG_DIR, f'checkpoint{epoch}.tar'))
+        else:
+            torch.save(save_dict, os.path.join(LOG_DIR, 'checkpoint.tar'))
 if __name__=='__main__':
     train(start_epoch)

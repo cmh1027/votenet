@@ -43,6 +43,10 @@ parser.add_argument('--nms_iou', type=float, default=0.25, help='NMS IoU thresho
 parser.add_argument('--conf_thresh', type=float, default=0.05, help='Filter out predictions with obj prob less than it. [default: 0.05]')
 parser.add_argument('--faster_eval', action='store_true', help='Faster evaluation by skippling empty bounding box removal.')
 parser.add_argument('--shuffle_dataset', action='store_true', help='Shuffle the dataset (random order).')
+parser.add_argument('--use_pointformer', action='store_true', help='Use Pointformer as backbone')
+parser.add_argument('--ratio', type=int, default=1)
+parser.add_argument('--refinement', type=int, default=0)
+parser.add_argument('--new_pe', action='store_true')
 FLAGS = parser.parse_args()
 
 if FLAGS.use_cls_nms:
@@ -56,7 +60,10 @@ CHECKPOINT_PATH = FLAGS.checkpoint_path
 assert(CHECKPOINT_PATH is not None)
 FLAGS.DUMP_DIR = DUMP_DIR
 AP_IOU_THRESHOLDS = [float(x) for x in FLAGS.ap_iou_thresholds.split(',')]
-
+POINTNET = not FLAGS.use_pointformer
+RATIO = FLAGS.ratio
+REFINEMENT = FLAGS.refinement
+NEW_PE = FLAGS.new_pe
 # Prepare DUMP_DIR
 if not os.path.exists(DUMP_DIR): os.mkdir(DUMP_DIR)
 DUMP_FOUT = open(os.path.join(DUMP_DIR, 'log_eval.txt'), 'w')
@@ -110,7 +117,11 @@ net = Detector(num_class=DATASET_CONFIG.num_class,
                num_proposal=FLAGS.num_target,
                input_feature_dim=num_input_channel,
                vote_factor=FLAGS.vote_factor,
-               sampling=FLAGS.cluster_sampling)
+               sampling=FLAGS.cluster_sampling,
+               pointnet=POINTNET,
+               ratio=RATIO,
+               refinement=REFINEMENT,
+               new_pe=NEW_PE)
 net.to(device)
 criterion = MODEL.get_loss
 
@@ -158,7 +169,6 @@ def evaluate_one_epoch():
             if 'loss' in key or 'acc' in key or 'ratio' in key:
                 if key not in stat_dict: stat_dict[key] = 0
                 stat_dict[key] += end_points[key].item()
-
         batch_pred_map_cls = parse_predictions(end_points, CONFIG_DICT) 
         batch_gt_map_cls = parse_groundtruths(end_points, CONFIG_DICT) 
         for ap_calculator in ap_calculator_list:

@@ -17,6 +17,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 sys.path.append(BASE_DIR)
 from backbone_module import Pointnet2Backbone
+from pointformer import Pointformer
 from voting_module import VotingModule
 from proposal_module import ProposalModule
 from dump_helper import dump_results
@@ -43,7 +44,7 @@ class VoteNet(nn.Module):
     """
 
     def __init__(self, num_class, num_heading_bin, num_size_cluster, mean_size_arr,
-        input_feature_dim=0, num_proposal=128, vote_factor=1, sampling='vote_fps'):
+        input_feature_dim=0, num_proposal=128, vote_factor=1, sampling='vote_fps', pointnet=True, ratio=1, refinement=0, new_pe=False):
         super().__init__()
 
         self.num_class = num_class
@@ -57,7 +58,15 @@ class VoteNet(nn.Module):
         self.sampling=sampling
 
         # Backbone point feature learning
-        self.backbone_net = Pointnet2Backbone(input_feature_dim=self.input_feature_dim)
+        if pointnet is True:
+            self.backbone_net = Pointnet2Backbone(input_feature_dim=self.input_feature_dim)
+        else:
+            self.backbone_net = Pointformer(
+                input_feature_dim=self.input_feature_dim, 
+                ratios=[ratio, ratio, ratio, ratio], 
+                refinement=refinement,
+                new_pe=new_pe
+            )
 
         # Hough voting
         self.vgen = VotingModule(self.vote_factor, 256)
@@ -108,24 +117,33 @@ if __name__=='__main__':
     sys.path.append(os.path.join(ROOT_DIR, 'sunrgbd'))
     from sunrgbd_detection_dataset import SunrgbdDetectionVotesDataset, DC
     from loss_helper import get_loss
-
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--use_pointformer', action='store_true')
+    parser.add_argument('--ratio', type=int, default=1)
+    parser.add_argument('--refinement', type=int, default=0)
+    parser.add_argument('--new_pe', action='store_true')
+    FLAGS = parser.parse_args()
+    USE_POINTFORMER = FLAGS.use_pointformer
+    RATIO = FLAGS.ratio
+    REFINEMENT = FLAGS.refinement
+    NEW_PE = FLAGS.new_pe
     # Define model
-    model = VoteNet(10,12,10,np.random.random((10,3))).cuda()
-    
+    model = VoteNet(10,12,10,np.random.random((10,3)), pointnet=not USE_POINTFORMER, ratio=RATIO, refinement=REFINEMENT, new_pe=NEW_PE).cuda()
     try:
         # Define dataset
         TRAIN_DATASET = SunrgbdDetectionVotesDataset('train', num_points=20000, use_v1=True)
-
         # Model forward pass
         sample = TRAIN_DATASET[5]
         inputs = {'point_clouds': torch.from_numpy(sample['point_clouds']).unsqueeze(0).cuda()}
     except:
         print('Dataset has not been prepared. Use a random sample.')
-        inputs = {'point_clouds': torch.rand((20000,3)).unsqueeze(0).cuda()}
+        inputs = {'point_clouds': torch.rand((2, 20000,3)).cuda()}
 
     end_points = model(inputs)
-    for key in end_points:
-        print(key, end_points[key])
+    print("Complete")
+    # for key in end_points:
+    #     print(key, end_points[key])
 
     try:
         # Compute loss

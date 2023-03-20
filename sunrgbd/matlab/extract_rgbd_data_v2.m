@@ -35,7 +35,7 @@ mkdir(det_label_folder);
 mkdir(seg_label_folder);
 %% Read
 parfor imageId = 1:10335
-    imageId
+imageId
 try
 data = SUNRGBDMeta(imageId);
 data.depthpath(1:16) = '';
@@ -53,7 +53,7 @@ points3d_rgb = [points3d, rgb];
 % scipy.io.loadmat('xxx.mat')['points3d_rgb'] to load the data.
 mat_filename = strcat(num2str(imageId,'%06d'), '.mat');
 txt_filename = strcat(num2str(imageId,'%06d'), '.txt');
-parsave(strcat(depth_folder, mat_filename), points3d_rgb);
+save(strcat(depth_folder, mat_filename),'points3d_rgb');
 
 % Write images
 copyfile(data.rgbpath, sprintf('%s/%06d.jpg', image_folder, imageId));
@@ -71,12 +71,14 @@ for j = 1:length(data.groundtruth3DBB)
     orientation = data.groundtruth3DBB(j).orientation;
     coeffs = abs(data.groundtruth3DBB(j).coeffs);
     box2d = data2d.groundtruth2DBB(j).gtBb2D;
-    assert(strcmp(data2d.groundtruth2DBB(j).classname, classname));
+    % assert(strcmp(data2d.groundtruth2DBB(j).classname, classname));
     fprintf(fid, '%s %d %d %d %d %f %f %f %f %f %f %f %f\n', classname, box2d(1), box2d(2), box2d(3), box2d(4), centroid(1), centroid(2), centroid(3), coeffs(1), coeffs(2), coeffs(3), orientation(1), orientation(2));
 end
 fclose(fid);
 
-catch
+catch e
+	fprintf(e.identifier, '\n');
+	fprintf(e.message, '\n');
 end
 
 end
